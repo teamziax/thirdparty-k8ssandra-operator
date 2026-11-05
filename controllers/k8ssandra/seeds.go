@@ -9,6 +9,7 @@ import (
 	cassdcapi "github.com/k8ssandra/cass-operator/apis/cassandra/v1beta1"
 	"github.com/k8ssandra/cass-operator/pkg/reconciliation"
 	api "github.com/k8ssandra/k8ssandra-operator/apis/k8ssandra/v1alpha1"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/cassandra"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/result"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -65,9 +66,16 @@ func (r *K8ssandraClusterReconciler) reconcileSeedsEndpoints(
 
 	// Additional seed nodes should never be part of the current datacenter
 	filteredSeeds := make([]string, 0)
-	for _, seed := range seeds {
+	for i := range seeds {
+		seed := &seeds[i]
 		if seed.Labels[cassdcapi.DatacenterLabel] != dc.Name {
-			filteredSeeds = append(filteredSeeds, seed.Status.PodIP)
+			// A pod on a network the other datacenters can't route to advertises another network's address.
+			address, err := cassandra.AdvertisedAddress(seed)
+			if err != nil {
+				logger.Info("Leaving a seed out of the additional seeds until it has an address", "pod", seed.Name, "reason", err.Error())
+				continue
+			}
+			filteredSeeds = append(filteredSeeds, address)
 		}
 	}
 	filteredSeeds = append(filteredSeeds, additionalSeeds...)
