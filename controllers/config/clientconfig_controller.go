@@ -215,6 +215,7 @@ func (r *ClientConfigReconciler) initAdditionalClusterConfig(ctx context.Context
 	}
 
 	r.ClientCache.AddClient(cCfg.GetContextName(), c.GetClient())
+	r.ClientCache.AddRestConfig(cCfg.GetContextName(), cfg)
 
 	err = mgr.Add(c)
 	if err != nil {

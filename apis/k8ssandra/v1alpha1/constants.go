@@ -34,6 +34,27 @@ const (
 
 	RebuildDcAnnotation = "k8ssandra.io/rebuild-dc"
 
+	// AdvertisedNetworkAnnotation names, on a Cassandra pod, the Multus network whose address the
+	// other datacenters should use to reach it, e.g. "constellation-cassandra/cassandra-public". When
+	// it is set, the pod's address on that network (from its k8s.v1.cni.cncf.io/network-status
+	// annotation) replaces its pod IP in the other datacenters' seed lists. Set it through
+	// DatacenterTemplate.Meta.Pods.Annotations, next to the k8s.v1.cni.cncf.io/networks annotation that
+	// attaches the network. It is for clusters whose pod networks don't route to each other; Cassandra
+	// itself must broadcast the same address (broadcast_address, e.g. through the per-node config).
+	AdvertisedNetworkAnnotation = "k8ssandra.io/advertised-network"
+
+	// ManagementApiAccessAnnotation, on a CassandraDatacenter (set through
+	// DatacenterTemplate.Meta.Annotations), chooses how a control plane in another Kubernetes cluster
+	// reaches the datacenter's Management API. Unset, it connects to each pod's IP directly, which
+	// needs the pod networks to route between the clusters. ManagementApiAccessApiServerProxy sends
+	// the requests through the data plane cluster's API server instead, using the pods/proxy
+	// subresource, so only that API server needs to be reachable, as it already is for the operator.
+	ManagementApiAccessAnnotation = "k8ssandra.io/management-api-access"
+
+	// ManagementApiAccessApiServerProxy is the ManagementApiAccessAnnotation value that sends
+	// Management API requests through the API server's pods/proxy subresource.
+	ManagementApiAccessApiServerProxy = "apiserver-proxy"
+
 	NameLabel      = "app.kubernetes.io/name"
 	NameLabelValue = "k8ssandra-operator"
 

@@ -206,7 +206,7 @@ func main() {
 			Client:           mgr.GetClient(),
 			Scheme:           mgr.GetScheme(),
 			ClientCache:      clientCache,
-			ManagementApi:    cassandra.NewManagementApiFactory(),
+			ManagementApi:    cassandra.NewManagementApiFactory(cassandra.WithRemoteRestConfigs(clientCache.GetRemoteRestConfigFor)),
 			Recorder:         mgr.GetEventRecorder("k8ssandracluster-controller"),
 			ImageRegistry:    registry,
 		}).SetupWithManager(ctx, mgr, additionalClusters); err != nil {

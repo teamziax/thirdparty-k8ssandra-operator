@@ -26,6 +26,10 @@ type ClientCache struct {
 	// RemoteClients to other clusters. The string is the name of the KubeConfig item targeting
 	// another cluster.
 	remoteClients map[string]client.Client
+
+	// remoteRestConfigs holds the rest.Config each remote client was built from, by context name,
+	// for callers that need to talk to a remote API server other than through a client.Client.
+	remoteRestConfigs map[string]*rest.Config
 }
 
 func New(localClient client.Client, noCacheClient client.Client, scheme *runtime.Scheme) *ClientCache {
@@ -35,6 +39,8 @@ func New(localClient client.Client, noCacheClient client.Client, scheme *runtime
 		noCacheClient: noCacheClient,
 		scheme:        scheme,
 		remoteClients: make(map[string]client.Client),
+
+		remoteRestConfigs: make(map[string]*rest.Config),
 	}
 }
 
@@ -75,6 +81,23 @@ func (c *ClientCache) AddClient(k8sContextName string, cli client.Client) {
 	c.remoteClients[k8sContextName] = cli
 }
 
+// AddRestConfig records the rest.Config the remote client for k8sContextName was built from.
+func (c *ClientCache) AddRestConfig(k8sContextName string, cfg *rest.Config) {
+	c.remoteRestConfigs[k8sContextName] = cfg
+}
+
+// GetRemoteRestConfigFor returns the rest.Config of the remote cluster that cli talks to, and false when cli
+// is the local client or one the cache doesn't know.
+func (c *ClientCache) GetRemoteRestConfigFor(cli client.Client) (*rest.Config, bool) {
+	for name, remote := range c.remoteClients {
+		if remote == cli {
+			cfg, found := c.remoteRestConfigs[name]
+			return cfg, found
+		}
+	}
+	return nil, false
+}
+
 // createClient creates a remoteClient and stores it in the cache. If already stored, returns the existing client
 func (c *ClientCache) createClient(contextName string, restConfig *rest.Config) (client.Client, error) {
 	if cli, found := c.remoteClients[contextName]; found {
@@ -89,6 +112,7 @@ func (c *ClientCache) createClient(contextName string, restConfig *rest.Config) 
 
 	// Store for later use and return to the caller
 	c.remoteClients[contextName] = remoteClient
+	c.remoteRestConfigs[contextName] = restConfig
 	return remoteClient, nil
 }
 

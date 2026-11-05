@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	api "github.com/k8ssandra/k8ssandra-operator/apis/k8ssandra/v1alpha1"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/errors"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/utils"
 
@@ -12,6 +13,7 @@ import (
 	cassdcapi "github.com/k8ssandra/cass-operator/apis/cassandra/v1beta1"
 	"github.com/k8ssandra/cass-operator/pkg/httphelper"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -29,11 +31,29 @@ type ManagementApiFactory interface {
 	) (ManagementApiFacade, error)
 }
 
-func NewManagementApiFactory() ManagementApiFactory {
-	return &defaultManagementApiFactory{}
+func NewManagementApiFactory(opts ...ManagementApiFactoryOption) ManagementApiFactory {
+	factory := &defaultManagementApiFactory{}
+	for _, opt := range opts {
+		opt(factory)
+	}
+	return factory
+}
+
+// ManagementApiFactoryOption configures the factory NewManagementApiFactory returns.
+type ManagementApiFactoryOption func(*defaultManagementApiFactory)
+
+// WithRemoteRestConfigs lets the factory reach the Management API of a datacenter annotated with
+// ManagementApiAccessAnnotation=ManagementApiAccessApiServerProxy through its cluster's API server.
+// restConfigFor returns the rest.Config of the remote cluster a client talks to, and false for the
+// local client: a datacenter in the control plane's own cluster is always reached directly.
+func WithRemoteRestConfigs(restConfigFor func(client.Client) (*rest.Config, bool)) ManagementApiFactoryOption {
+	return func(f *defaultManagementApiFactory) {
+		f.restConfigFor = restConfigFor
+	}
 }
 
 type defaultManagementApiFactory struct {
+	restConfigFor func(client.Client) (*rest.Config, bool)
 }
 
 func (d defaultManagementApiFactory) NewManagementApiFacade(
@@ -47,6 +67,16 @@ func (d defaultManagementApiFactory) NewManagementApiFacade(
 	} else if protocol, err := httphelper.GetManagementApiProtocol(dc); err != nil {
 		return nil, err
 	} else {
+		if dc.Annotations[api.ManagementApiAccessAnnotation] == api.ManagementApiAccessApiServerProxy && d.restConfigFor != nil {
+			if restConfig, remote := d.restConfigFor(k8sClient); remote {
+				proxyClient, err := newApiServerProxyClient(restConfig, dc, k8sClient)
+				if err != nil {
+					return nil, err
+				}
+				logger.V(1).Info("Reaching the Management API through the API server", "server", proxyClient.server.Host)
+				httpClient = proxyClient
+			}
+		}
 		nodeMgmtClient := &httphelper.NodeMgmtClient{
 			Client:   httpClient,
 			Log:      logger,
